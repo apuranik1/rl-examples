@@ -10,8 +10,10 @@ Each action is a list of Outcome instances. A terminal state has only one
 possible action, which is a self-loop with probability 1 and reward 0.
 """
 
-from collection import namedtuple
+from collections import namedtuple
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 
 
 Outcome = namedtuple('Outcome', 'prob state reward')
@@ -22,11 +24,11 @@ def value_action(outcomes, values, gamma):
                for o in outcomes)
 
 
-def evaluate_policy(policy, mdp, gamma, convergence_eps=0.01):
-    delta = 0
+def evaluate_policy(policy, mdp, init_values, gamma, convergence_eps=0.001):
     values = np.zeros(len(mdp))
     stop = False
     while not stop:
+        delta = 0
         for state, actions in enumerate(mdp):
             # evaluate state_i
             selected_action = policy[state]
@@ -34,7 +36,6 @@ def evaluate_policy(policy, mdp, gamma, convergence_eps=0.01):
             new_value = value_action(outcome_dist, values, gamma)
             update = np.abs(values[state] - new_value)
             values[state] = new_value
-
             if update > delta:
                 delta = update
 
@@ -52,8 +53,10 @@ def update_policy(policy, mdp, values, gamma):
     # compute the greedy policy based on the mdp
     converged = True
     for state, actions in enumerate(mdp):
+
         def value_func(a):
             return value_action(actions[a], values, gamma)
+
         # compute argmax_{a \in actions} value(s, a)
         old_policy = policy[state]
         new_policy = max(range(len(actions)), key=value_func)
@@ -69,5 +72,36 @@ def compute_policy(mdp, gamma):
     values = np.zeros(nstates)
     converged = False
     while not converged:
-        values = evaluate_policy(policy, mdp, gamma)
+        values = evaluate_policy(policy, mdp, values, gamma)
+        sns.heatmap(np.reshape(values, (4, 4)), annot=True)
+        plt.show()
         converged = update_policy(policy, mdp, values, gamma)
+        print(np.reshape(policy, (4, 4)))
+        print(np.reshape(values, (4, 4)))
+    return policy
+
+
+def mdp_example():
+    gamma = 0.9
+    # simple gridworld policy - cells (0,0) and (3,3) are goal states
+
+    def make_state(cell_num):
+        if cell_num == 0 or cell_num == 15:
+            return [[Outcome(1, cell_num, 0)]]  # terminal state
+        x = cell_num % 4
+        y = cell_num // 4
+        left = (x - 1, y, [Outcome(1, cell_num - 1, -1)])
+        right = (x + 1, y, [Outcome(1, cell_num + 1, -1)])
+        up = (x, y - 1, [Outcome(1, cell_num - 4, -1)])
+        down = (x, y + 1, [Outcome(1, cell_num + 4, -1)])
+        return [move[2] for move in [left, right, up, down]
+                if (move[0] >= 0 and move[0] < 4
+                    and move[1] >= 0 and move[1] < 4)]
+
+    mdp = [make_state(num) for num in range(16)]
+    opt = compute_policy(mdp, gamma)
+    print(np.reshape(opt, (4, 4)))
+
+
+if __name__ == '__main__':
+    mdp_example()
