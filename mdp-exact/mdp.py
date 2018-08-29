@@ -114,8 +114,8 @@ def value_iteration(mdp, gamma, epsilon=0.01):
     converged = False
     while not converged:
         delta = value_iteration_iter(mdp, values, gamma)
-        plt.plot(values)
-        plt.show()
+        # plt.plot(values)
+        # plt.show()
         converged = (delta < epsilon)
     policy = np.zeros(nstates, dtype=np.int)
     update_policy(policy, mdp, values, gamma)
