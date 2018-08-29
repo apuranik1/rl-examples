@@ -8,6 +8,17 @@ action, and new state.
 An MDP is encoded as a list of states. Each state comprises a list of actions.
 Each action is a list of Outcome instances. A terminal state has only one
 possible action, which is a self-loop with probability 1 and reward 0.
+
+It might be better to have states be dictionaries of actions instead of lists.
+This would allow for actions like "forward" to be consistent across different
+states, instead of being encoded by multiple potentially distinct integer
+indices. This wouldn't create a particularly large code change.
+
+The functions value_update and value_iteration_iter can be composed to build
+many MDP solvers. Value iteration exclusively runs the latter. It may be more
+efficient to run multiple iterations of value_update before running
+value_iteration_iter (Sutton 83). The function update_policy is for updating
+only the policy, without refining value estimates online.
 """
 
 from collections import namedtuple
@@ -24,21 +35,37 @@ def value_action(outcomes, values, gamma):
                for o in outcomes)
 
 
-def evaluate_policy(policy, mdp, init_values, gamma, convergence_eps=0.001):
-    values = np.zeros(len(mdp))
+def value_update(policy, mdp, values, gamma):
+    """Update value estimates of MDP states according to a fixed policy"""
+    delta = 0
+    for state, actions in enumerate(mdp):
+        # evaluate state_i
+        selected_action = policy[state]
+        outcome_dist = actions[selected_action]
+        new_value = value_action(outcome_dist, values, gamma)
+        update = np.abs(values[state] - new_value)
+        values[state] = new_value
+        if update > delta:
+            delta = update
+    return delta
+
+
+def value_iteration_iter(mdp, values, gamma):
+    """Update value estimates of MDP states while taking greedy actions"""
+    delta = 0
+    for state, actions in enumerate(mdp):
+        new_value = max(value_action(a, values, gamma) for a in actions)
+        update = np.abs(values[state] - new_value)
+        values[state] = new_value
+        if update > delta:
+            delta = update
+    return delta
+
+
+def evaluate_policy(policy, mdp, values, gamma, convergence_eps=0.001):
     stop = False
     while not stop:
-        delta = 0
-        for state, actions in enumerate(mdp):
-            # evaluate state_i
-            selected_action = policy[state]
-            outcome_dist = actions[selected_action]
-            new_value = value_action(outcome_dist, values, gamma)
-            update = np.abs(values[state] - new_value)
-            values[state] = new_value
-            if update > delta:
-                delta = update
-
+        delta = value_update(policy, mdp, values, gamma)
         if delta < convergence_eps:
             stop = True
     return values
@@ -81,6 +108,18 @@ def compute_policy(mdp, gamma):
     return policy
 
 
+def value_iteration(mdp, gamma, epsilon=0.01):
+    nstates = len(mdp)
+    values = np.zeros(nstates)
+    converged = False
+    while not converged:
+        delta = value_iteration_iter(mdp, values, gamma)
+        converged = (delta > epsilon)
+    policy = np.zeros(nstates, dtype=np.int)
+    update_policy(policy, mdp, values, gamma)
+    return policy
+
+
 def mdp_example():
     gamma = 0.9
     # simple gridworld policy - cells (0,0) and (3,3) are goal states
@@ -99,7 +138,8 @@ def mdp_example():
                     and move[1] >= 0 and move[1] < 4)]
 
     mdp = [make_state(num) for num in range(16)]
-    opt = compute_policy(mdp, gamma)
+    # opt = compute_policy(mdp, gamma)
+    opt = value_iteration(mdp, gamma)
     print(np.reshape(opt, (4, 4)))
 
 
