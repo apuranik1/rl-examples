@@ -100,11 +100,11 @@ def compute_policy(mdp, gamma):
     converged = False
     while not converged:
         values = evaluate_policy(policy, mdp, values, gamma)
-        sns.heatmap(np.reshape(values, (4, 4)), annot=True)
-        plt.show()
+        # sns.heatmap(np.reshape(values, (4, 4)), annot=True)
+        # plt.show()
         converged = update_policy(policy, mdp, values, gamma)
-        print(np.reshape(policy, (4, 4)))
-        print(np.reshape(values, (4, 4)))
+        # print(np.reshape(policy, (4, 4)))
+        # print(np.reshape(values, (4, 4)))
     return policy
 
 
@@ -114,7 +114,9 @@ def value_iteration(mdp, gamma, epsilon=0.01):
     converged = False
     while not converged:
         delta = value_iteration_iter(mdp, values, gamma)
-        converged = (delta > epsilon)
+        plt.plot(values)
+        plt.show()
+        converged = (delta < epsilon)
     policy = np.zeros(nstates, dtype=np.int)
     update_policy(policy, mdp, values, gamma)
     return policy
@@ -143,5 +145,32 @@ def mdp_example():
     print(np.reshape(opt, (4, 4)))
 
 
+def gambler_example():
+    gamma = 0.9
+
+    def make_state(money):
+        if money > 100 or money < 0:
+            raise ValueError('Money must be in [0, 100]')
+        if money == 0:
+            return [[Outcome(1, 0, 0)]]
+        if money == 100:
+            return [[Outcome(1, 100, 0)]]
+        actions = []
+        for bet in range(0, money + 1):
+            positive = min(money + bet, 100)
+            pos_reward = 1 if positive == 100 else 0
+            negative = money - bet
+            neg_reward = 0
+            actions.append([Outcome(0.4, positive, pos_reward),
+                            Outcome(0.6, negative, neg_reward)])
+        return actions
+
+    mdp = [make_state(num) for num in range(101)]
+    opt = value_iteration(mdp, gamma)
+    plt.plot(opt)
+    plt.show()
+
+
 if __name__ == '__main__':
-    mdp_example()
+    # mdp_example()
+    gambler_example()
