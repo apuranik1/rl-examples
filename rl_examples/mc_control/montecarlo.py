@@ -253,3 +253,24 @@ def train(agent: DiscreteAgent[TState, TAction], n_episodes: int) -> None:
             t += 1
         agent.episode_end()
         env.reset()
+
+
+def run_example() -> None:
+    from rl_examples.cliff_walk import CliffWalkEnvironment
+
+    env = CliffWalkEnvironment(5, 3)
+    agent = MonteCarloOffPolicy(env, 0.2, 0.9)
+    print("initial policy")
+    print(agent.policy)
+    print()
+    train(agent, 1000)
+    print("ending status")
+    print(agent.policy)
+    print()
+    print(agent.observation_weights)
+    print()
+    print(agent.estimates)
+
+
+if __name__ == "__main__":
+    run_example()

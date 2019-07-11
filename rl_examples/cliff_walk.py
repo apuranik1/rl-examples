@@ -3,6 +3,7 @@ from enum import Enum, auto
 from typing import List, Sequence
 
 from rl_examples.discrete import DiscreteEnvironment, State
+from .montecarlo import MonteCarloOffPolicy, train
 
 
 @dataclass(frozen=True)
@@ -69,3 +70,22 @@ class CliffWalkEnvironment(DiscreteEnvironment[CliffState, Move]):
         else:
             self._state = self.state_grid[new_x][new_y]
             return -1.0
+
+
+def run_example() -> None:
+    env = CliffWalkEnvironment(5, 3)
+    agent = MonteCarloOffPolicy(env, 0.2, 0.9)
+    print("initial policy")
+    print(agent.policy)
+    print()
+    train(agent, 1000)
+    print("ending status")
+    print(agent.policy)
+    print()
+    print(agent.observation_weights)
+    print()
+    print(agent.estimates)
+
+
+if __name__ == "__main__":
+    run_example()
