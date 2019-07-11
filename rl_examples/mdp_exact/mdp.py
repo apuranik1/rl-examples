@@ -22,11 +22,10 @@ only the policy, without refining value estimates online.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Sequence
+from typing import List, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
 
 
 @dataclass(frozen=True)

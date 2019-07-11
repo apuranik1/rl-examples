@@ -5,86 +5,64 @@ we'll frequently overestimate state values.
 """
 
 import abc
-from dataclasses import dataclass
-from typing import Dict, Generic, Iterable, List, Sequence, Tuple, TypeVar
+from typing import Dict, List, Tuple, TypeVar
 
 import numpy as np
 
-
-@dataclass(frozen=True)
-class State:
-    terminal: bool
+from ..discrete import DiscreteEnvironment, DiscreteAgent, State
 
 
-TAction = TypeVar("TAction")
 TState = TypeVar("TState", bound=State)
+TAction = TypeVar("TAction")
 
 
-class Environment(abc.ABC, Generic[TAction, TState]):
-    """An abstract base class defining the interface for a finite environment.
-    Useful for problems with a tractable number of distinct states that can be
-    easily simulated, but not easily described by an MDP.
-    """
-
-    @property
-    @abc.abstractmethod
-    def state(self) -> TState:
-        """Return the current state"""
-        pass
-
-    @property
-    def terminated(self) -> bool:
-        return self.state.terminal
-
-    @abc.abstractmethod
-    def reset(self) -> None:
-        pass
-
-    @abc.abstractmethod
-    def state_list(self) -> Sequence[TState]:
-        """Return a list of all possible states"""
-        pass
-
-    def nonterminal_states(self) -> Sequence[TState]:
-        return [s for s in self.state_list() if not s.terminal]
-
-    def terminal_states(self) -> Sequence[TState]:
-        return [s for s in self.state_list() if not s.terminal]
-
-    @abc.abstractmethod
-    def get_actions(self, state: TState = None) -> Iterable[TAction]:
-        """Return an iterable of available actions at state.
-
-        If state is not specified, default to the current state.
-        """
-        pass
-
-    def take_action(self, action: TAction) -> float:
-        """Respond to an actor taking an action, returning the reward"""
-        pass
-
-
-def _arbitrary_policy(env: Environment[TAction, TState]) -> Dict[TState, TAction]:
+def _arbitrary_policy(
+    env: DiscreteEnvironment[TState, TAction]
+) -> Dict[TState, TAction]:
     return {s: next(iter(env.get_actions(s))) for s in env.nonterminal_states()}
 
 
-class Agent(Generic[TAction, TState]):
-    """An base class for an agent learning in an environment"""
-
-    def __init__(self, env: Environment[TAction, TState]):
-        self.env = env
-
-    def action(self) -> TAction:
-        raise NotImplementedError()
-
-    def update(self, oldstate: TState, action: TAction, reward: float, t: int) -> None:
-        raise NotImplementedError()
-
-    def episode_end(self) -> None:
+class OnPolicyAgent(DiscreteAgent[TState, TAction], abc.ABC):
+    @abc.abstractmethod
+    def update(self, old_state: TState, action: TAction, reward: float, t: int) -> None:
         pass
 
+    def act_and_train(self, t: int) -> Tuple[TState, TAction, float]:
+        old_state = self.env.state
+        action = self.action()
+        reward = self.env.take_action(action)
+        self.update(old_state, action, reward, t)
+        return (old_state, action, reward)
 
-class MonteCarloGreedy(Agent[TAction, TState]):
+
+class OffPolicyAgent(DiscreteAgent[TState, TAction], abc.ABC):
+    @abc.abstractmethod
+    def action_and_prob_ratio(self) -> Tuple[TAction, float]:
+        """A training action, together with the importance sampling ratio.
+        The ratio is p_policy(action) / p_behavior(action).
+        """
+        pass
+
+    @abc.abstractmethod
+    def update(
+        self,
+        old_state: TState,
+        action: TAction,
+        prob_ratio: float,
+        reward: float,
+        t: int,
+    ) -> None:
+        pass
+
+    def act_and_train(self, t: int) -> Tuple[TState, TAction, float]:
+        old_state = self.env.state
+        action, prob_ratio = self.action_and_prob_ratio()
+        reward = self.env.take_action(action)
+        self.update(old_state, action, prob_ratio, reward, t)
+        return (old_state, action, reward)
+
+
+class MonteCarloGreedy(OnPolicyAgent[TState, TAction]):
     """A greedy on-policy Monte Carlo control agent which does no exploration.
 
     Only tracks return averages after the first state visit in an epoch.
@@ -93,10 +71,10 @@ class MonteCarloGreedy(Agent[TAction, TState]):
     provide an action() implementation. Subclasses should override action.
     """
 
-    def __init__(self, env: Environment[TAction, TState], reward_decay: float):
+    def __init__(self, env: DiscreteEnvironment[TState, TAction], reward_decay: float):
         super().__init__(env)
         self.gamma = reward_decay
-        states = env.state_list()
+        states = env.nonterminal_states()
         self.observation_counts = {
             (state, act): 0 for state in states for act in env.get_actions(state)
         }
@@ -110,12 +88,12 @@ class MonteCarloGreedy(Agent[TAction, TState]):
     def greedy_action(self, state: TState) -> TAction:
         return self.policy[state]
 
-    def update(self, oldstate: TState, action: TAction, reward: float, t: int) -> None:
+    def update(self, old_state: TState, action: TAction, reward: float, t: int) -> None:
         # record the data, but don't act on it
-        index = (oldstate, action)
+        index = (old_state, action)
         if index not in self.first_in_episode:
             self.first_in_episode[index] = len(self.episode_data)
-        self.episode_data.append((oldstate, action, reward))
+        self.episode_data.append((old_state, action, reward))
 
     def _optimize_policy(self, state: TState) -> None:
         """Greedily optimize the policy's behavior at `state`."""
@@ -144,7 +122,7 @@ class MonteCarloGreedy(Agent[TAction, TState]):
         self.first_in_episode = {}
 
 
-class MonteCarloES(MonteCarloGreedy[TAction, TState]):
+class MonteCarloES(MonteCarloGreedy[TState, TAction]):
     """Monte Carlo greedy agent with exploring starts"""
 
     def action(self) -> TAction:
@@ -156,10 +134,10 @@ class MonteCarloES(MonteCarloGreedy[TAction, TState]):
         return self.greedy_action(self.env.state)
 
 
-class MonteCarloSoft(MonteCarloGreedy[TAction, TState]):
+class MonteCarloSoft(MonteCarloGreedy[TState, TAction]):
     def __init__(
         self,
-        env: Environment[TAction, TState],
+        env: DiscreteEnvironment[TState, TAction],
         reward_decay: float,
         exploration_rate: float,
     ):
@@ -174,31 +152,104 @@ class MonteCarloSoft(MonteCarloGreedy[TAction, TState]):
         return self.greedy_action(state)
 
 
-class MonteCarloOffPolicy(Agent[TAction, TState]):
+class MonteCarloOffPolicy(OffPolicyAgent[TState, TAction]):
     """A Monte Carlo control agent which uses importance sampling to translate
     feedback from a behavior policy into estimates for a target policy.
+
+    The target policy in this case is purely greedy, and the behavior is
+    epsilon-greedy.
+    This is a rather odd algorithm as it stands, because it can only ever learn
+    from the tails of episodes. This happens because off-policy actions have 0
+    probability, so they immediately nullify any learning.
+
+    TODO: Discounting-aware importance sampling
     """
 
     def __init__(
         self,
-        env: Environment[TAction, TState],
+        env: DiscreteEnvironment[TState, TAction],
         exploration_rate: float,
         reward_decay: float,
+        unbiased: bool = False,
     ):
         super().__init__(env)
         self.exploration_rate = exploration_rate
-        self.reward_decay = reward_decay
+        self.gamma = reward_decay
         # set arbitrary policy
         self.policy = _arbitrary_policy(self.env)
-        self.estimates = {
-            (s, a): 0 for s in env.nonterminal_states() for a in env.get_actions(s)
-        }
+        self.observation_weights = {
+            (state, act): 0.0
+            for state in env.nonterminal_states()
+            for act in env.get_actions(state)
+        }  # instead of counts, we now weight by probability
+        self.estimates = {(s, a): -1e6 for (s, a) in self.observation_weights}
+        # episode_data contains (state, action, prob_ratio, reward) tuples
+        self.episode_data: List[Tuple[TState, TAction, float, float]] = []
+
+    def update(
+        self,
+        old_state: TState,
+        action: TAction,
+        prob_ratio: float,
+        reward: float,
+        t: int,
+    ) -> None:
+        # in theory I should try first-visit vs every-visit
+        # but that's more effort
+        self.episode_data.append((old_state, action, prob_ratio, reward))
+
+    def _optimize_policy(self, state: TState) -> None:
+        """Greedily optimize the policy's behavior at `state`."""
+        self.policy[state] = max(
+            self.env.get_actions(state), key=lambda a: self.estimates[(state, a)]
+        )
+
+    def episode_end(self) -> None:
+        trailing_rewards = 0.0
+        weight_is = 1.0  # importance sampling ratio
+        T = len(self.episode_data)
+        for i, data in zip(range(T - 1, -1, -1), self.episode_data[::-1]):
+            state, action, prob_ratio, reward = data
+            trailing_rewards = trailing_rewards * self.gamma + reward
+            index = (state, action)
+            # update estimate
+            new_weight = self.observation_weights[index] + weight_is
+            if new_weight > 0.0:
+                # we have actual data to update on
+                current_estimate = self.estimates[index]
+                new_estimate = current_estimate + (weight_is / new_weight) * (
+                    trailing_rewards - current_estimate
+                )
+                self.estimates[index] = new_estimate
+                self.observation_weights[index] = new_weight
+                self._optimize_policy(state)
+            # weight prior data by the probability of the current move
+            weight_is = weight_is * prob_ratio
+            if weight_is == 0.0:
+                break
+        # reset
+        self.episode_data = []
+
+    def action_and_prob_ratio(self) -> Tuple[TAction, float]:
+        state = self.env.state
+        actions = self.env.get_actions()
+        policy_action = self.policy[state]
+        if np.random.rand() < self.exploration_rate:
+            choice = np.random.choice(actions)
+            return choice, float(choice == policy_action)
+        else:
+            return policy_action, 1.0
+
+    def action(self) -> TAction:
+        return self.policy[self.env.state]
 
 
-def train(agent: Agent[TAction, TState], n_episodes: int) -> None:
+def train(agent: DiscreteAgent[TState, TAction], n_episodes: int) -> None:
     env = agent.env
     for ep in range(n_episodes):
-        # run until termination
+        t = 0
         while not env.terminated:
-            selected = agent.action()
-            reward = env.take_action(selected)
+            s, a, r = agent.act_and_train(t)  # returns (S_t, A_t, R_t)
+            t += 1
+        agent.episode_end()
+        env.reset()
