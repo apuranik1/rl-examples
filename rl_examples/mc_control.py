@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple, TypeVar
 
 import numpy as np
 
-from ..discrete import DiscreteEnvironment, DiscreteAgent, State
+from rl_examples.discrete import DiscreteEnvironment, DiscreteAgent, State
 
 
 TState = TypeVar("TState", bound=State)
