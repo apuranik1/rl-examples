@@ -3,7 +3,6 @@ from enum import Enum, auto
 from typing import List, Sequence
 
 from rl_examples.discrete import DiscreteEnvironment, State
-from .montecarlo import MonteCarloOffPolicy, train
 
 
 @dataclass(frozen=True)
@@ -28,7 +27,6 @@ class CliffWalkEnvironment(DiscreteEnvironment[CliffState, Move]):
             [CliffState((x, y) == (width - 1, 0), x, y) for y in range(height)]
             for x in range(width)
         ]
-        self.off_edge = CliffState(True, -1, -1)
         self._state = self.state_grid[0][0]
 
     @property
@@ -39,8 +37,7 @@ class CliffWalkEnvironment(DiscreteEnvironment[CliffState, Move]):
         self._state = self.state_grid[0][0]
 
     def state_list(self) -> Sequence[CliffState]:
-        normal_states: List[CliffState] = sum(self.state_grid, [])
-        return normal_states + [self.off_edge]
+        return sum(self.state_grid, [])
 
     def get_actions(self, state: CliffState = None) -> List[Move]:
         actions: List[Move] = []
@@ -67,27 +64,8 @@ class CliffWalkEnvironment(DiscreteEnvironment[CliffState, Move]):
             new_x, new_y = x + 1, y
         # constant return of -1 incentivizes finishing as fast as possible
         if new_y == -1:
-            self._state = self.off_edge
+            self._state = self.state_grid[0][0]
             return -100.0
         else:
             self._state = self.state_grid[new_x][new_y]
             return -1.0
-
-
-def run_example() -> None:
-    env = CliffWalkEnvironment(5, 3)
-    agent = MonteCarloOffPolicy(env, 0.2, 0.9)
-    print("initial policy")
-    print(agent.policy)
-    print()
-    train(agent, 1000)
-    print("ending status")
-    print(agent.policy)
-    print()
-    print(agent.observation_weights)
-    print()
-    print(agent.estimates)
-
-
-if __name__ == "__main__":
-    run_example()
