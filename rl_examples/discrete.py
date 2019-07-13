@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from typing import Generic, Iterable, Sequence, Tuple, TypeVar
+from typing import Callable, Dict, Generic, Iterable, Sequence, Tuple, TypeVar
 
 
 @dataclass(frozen=True)
@@ -69,9 +69,39 @@ class DiscreteAgent(Generic[TState, TAction], abc.ABC):
     @abc.abstractmethod
     def act_and_train(self, t: int) -> Tuple[TState, TAction, float]:
         """Run a single act-and-train step.
-        Returns the tuple (S_t, A_t, r_t).
+        Returns the tuple (S_t, A_t, R_{t+1}).
         """
         pass
 
     def episode_end(self) -> None:
         pass
+
+
+def arbitrary_policy(
+    env: DiscreteEnvironment[TState, TAction]
+) -> Dict[TState, TAction]:
+    return {s: next(iter(env.get_actions(s))) for s in env.nonterminal_states()}
+
+
+def train(
+    agent: DiscreteAgent[TState, TAction],
+    n_episodes: int,
+    on_action: Callable[[TState, TAction, float, int], None] = None,
+    on_episode_end: Callable[[int], None] = None,
+) -> None:
+    """Trains the agent in its environment.
+    At the end of each timestep, calls on_action(S_t, A_t, R_{t+1}, t)
+    At the end of each episode, calls on_episode_end(T)
+    """
+    env = agent.env
+    for ep in range(n_episodes):
+        t = 0
+        while not env.terminated:
+            s, a, r = agent.act_and_train(t)  # returns (S_t, A_t, R_t)
+            if on_action:
+                on_action(s, a, r, t)
+            t += 1
+        agent.episode_end()
+        if on_episode_end:
+            on_episode_end(t)
+        env.reset()

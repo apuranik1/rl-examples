@@ -1,4 +1,4 @@
-"""More or less a lead-in to Q-learning.
+"""Monte Carlo value estimation and control
 
 An interesting observation - due to the winner's curse, if our rewards are noisy
 we'll frequently overestimate state values.
@@ -9,17 +9,16 @@ from typing import Dict, List, Tuple, TypeVar
 
 import numpy as np
 
-from rl_examples.discrete import DiscreteEnvironment, DiscreteAgent, State
+from rl_examples.discrete import (
+    arbitrary_policy,
+    DiscreteEnvironment,
+    DiscreteAgent,
+    State,
+)
 
 
 TState = TypeVar("TState", bound=State)
 TAction = TypeVar("TAction")
-
-
-def _arbitrary_policy(
-    env: DiscreteEnvironment[TState, TAction]
-) -> Dict[TState, TAction]:
-    return {s: next(iter(env.get_actions(s))) for s in env.nonterminal_states()}
 
 
 class OnPolicyAgent(DiscreteAgent[TState, TAction], abc.ABC):
@@ -79,7 +78,7 @@ class MonteCarloGreedy(OnPolicyAgent[TState, TAction]):
             (state, act): 0 for state in states for act in env.get_actions(state)
         }
         self.estimates = {index: 0.0 for index in self.observation_counts}
-        self.policy = _arbitrary_policy(self.env)
+        self.policy = arbitrary_policy(self.env)
         # map (s, a) to first index in episode
         self.first_in_episode: Dict[Tuple[TState, TAction], int] = {}
         # track (s, a, reward) for each episode
@@ -176,7 +175,7 @@ class MonteCarloOffPolicy(OffPolicyAgent[TState, TAction]):
         self.exploration_rate = exploration_rate
         self.gamma = reward_decay
         # set arbitrary policy
-        self.policy = _arbitrary_policy(self.env)
+        self.policy = arbitrary_policy(self.env)
         self.observation_weights = {
             (state, act): 0.0
             for state in env.nonterminal_states()
@@ -244,19 +243,9 @@ class MonteCarloOffPolicy(OffPolicyAgent[TState, TAction]):
         return self.policy[self.env.state]
 
 
-def train(agent: DiscreteAgent[TState, TAction], n_episodes: int) -> None:
-    env = agent.env
-    for ep in range(n_episodes):
-        t = 0
-        while not env.terminated:
-            s, a, r = agent.act_and_train(t)  # returns (S_t, A_t, R_t)
-            t += 1
-        agent.episode_end()
-        env.reset()
-
-
 def run_example() -> None:
     from rl_examples.cliff_walk import CliffWalkEnvironment
+    from rl_examples.discrete import train
 
     env = CliffWalkEnvironment(5, 3)
     agent = MonteCarloOffPolicy(env, 0.2, 0.9)
