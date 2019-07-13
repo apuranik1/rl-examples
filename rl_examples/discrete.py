@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from typing import Callable, Dict, Generic, Iterable, Sequence, Tuple, TypeVar
+from typing import Callable, Generic, Iterable, Sequence, Tuple, TypeVar
 
 
 @dataclass(frozen=True)
@@ -59,11 +59,8 @@ class DiscreteEnvironment(abc.ABC, Generic[TState, TAction]):
 class DiscreteAgent(Generic[TState, TAction], abc.ABC):
     """An base class for an agent learning in an environment"""
 
-    def __init__(self, env: DiscreteEnvironment[TState, TAction]):
-        self.env = env
-
     @abc.abstractmethod
-    def action(self) -> TAction:
+    def action(self, state: TState) -> TAction:
         pass
 
     @abc.abstractmethod
@@ -77,13 +74,8 @@ class DiscreteAgent(Generic[TState, TAction], abc.ABC):
         pass
 
 
-def arbitrary_policy(
-    env: DiscreteEnvironment[TState, TAction]
-) -> Dict[TState, TAction]:
-    return {s: next(iter(env.get_actions(s))) for s in env.nonterminal_states()}
-
-
 def train(
+    env: DiscreteEnvironment[TState, TAction],
     agent: DiscreteAgent[TState, TAction],
     n_episodes: int,
     on_action: Callable[[TState, TAction, float, int], None] = None,
@@ -93,7 +85,6 @@ def train(
     At the end of each timestep, calls on_action(S_t, A_t, R_{t+1}, t)
     At the end of each episode, calls on_episode_end(T)
     """
-    env = agent.env
     for ep in range(n_episodes):
         t = 0
         while not env.terminated:
