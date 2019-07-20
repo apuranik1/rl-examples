@@ -269,17 +269,18 @@ def run_example() -> None:
     from rl_examples.cliff_walk import CliffWalkEnvironment
     from rl_examples.discrete import train
 
-    env = CliffWalkEnvironment(8, 3)
-    agent = DoubleQAgent(env, 1, lr=0.5, exploration_rate=0.5)
+    env = CliffWalkEnvironment(5, 3)
+    # agent = DoubleQAgent(env, 1, lr=0.5, exploration_rate=0.5)
+    agent = QAgent(env, 1.0, 0.1, 0.1)
     i = 0
 
-    def on_epoch_end(t: int) -> None:
+    def on_episode_end(t: int) -> None:
         nonlocal i
         i += 1
         if i % 100 == 0:
             print(t)
 
-    train(env, agent, 1000, on_episode_end=on_epoch_end)
+    train(env, agent, 1000, on_episode_end=on_episode_end)
 
     # evaluate trained model
     t = 0

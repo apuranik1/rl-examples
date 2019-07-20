@@ -157,13 +157,15 @@ class MonteCarloOffPolicy(GreedyAgent[TState, TAction]):
         self.episode_data = []
 
     def action_and_prob_ratio(self) -> Tuple[TAction, float]:
-        actions = self.env.get_actions()
+        env_actions = list(self.env.get_actions())
+        n_actions = len(env_actions)
+        prob_on_policy = 1 - (self.exploration_rate * (1 - 1 / n_actions))
         policy_action = self.action(self.env.state)
         if np.random.rand() < self.exploration_rate:
-            choice = np.random.choice(actions)
-            return choice, float(choice == policy_action)
+            choice = np.random.choice(env_actions)
+            return choice, float(choice == policy_action) / prob_on_policy
         else:
-            return policy_action, 1.0
+            return policy_action, 1 / prob_on_policy
 
     def act_and_train(self, t: int) -> Tuple[TState, TAction, float]:
         old_state = self.env.state
