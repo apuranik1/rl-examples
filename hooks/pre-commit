@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -e
+
+black --check rl_examples || (black --diff rl_examples; false)
+mypy rl_examples
+flake8 rl_examples
