@@ -1,27 +1,27 @@
 import abc
-from dataclasses import dataclass
 from typing import Callable, Generic, Sequence, Tuple, TypeVar
 
 
-@dataclass(frozen=True)
 class State:
-    terminal: bool
+    def __init__(self, terminal: bool):
+        self.terminal = terminal
 
 
 TState = TypeVar("TState", bound=State)
 TAction = TypeVar("TAction")
 
 
-class DiscreteEnvironment(abc.ABC, Generic[TState, TAction]):
-    """An abstract base class defining the interface for a finite environment.
-    Useful for problems with a tractable number of distinct states that can be
-    easily simulated, but not easily described by an MDP.
+class PSFAEnvironment(abc.ABC, Generic[TState, TAction]):
+    """An environment with parametrized states and a finite set of actions (PSFA)
+    available at each state.
+
+    Such an environment does not support enumerating all states, but does allow
+    enumerating possible actions.
     """
 
     @property
     @abc.abstractmethod
     def state(self) -> TState:
-        """Return the current state"""
         pass
 
     @property
@@ -33,17 +33,6 @@ class DiscreteEnvironment(abc.ABC, Generic[TState, TAction]):
         pass
 
     @abc.abstractmethod
-    def state_list(self) -> Sequence[TState]:
-        """Return a list of all possible states"""
-        pass
-
-    def nonterminal_states(self) -> Sequence[TState]:
-        return [s for s in self.state_list() if not s.terminal]
-
-    def terminal_states(self) -> Sequence[TState]:
-        return [s for s in self.state_list() if not s.terminal]
-
-    @abc.abstractmethod
     def get_actions(self, state: TState = None) -> Sequence[TAction]:
         """Return an iterable of available actions at state.
 
@@ -51,19 +40,19 @@ class DiscreteEnvironment(abc.ABC, Generic[TState, TAction]):
         """
         pass
 
+    @abc.abstractmethod
     def take_action(self, action: TAction) -> float:
-        """Respond to an actor taking an action, returning the reward"""
+        """Respond to an actor taking an action, returning a reward"""
         pass
 
 
-class DiscreteAgent(Generic[TState, TAction], abc.ABC):
-    """An base class for an agent learning in an environment"""
+class PSFAAgent(abc.ABC, Generic[TState, TAction]):
+    """A base class for an agent learning in a PSFA environment"""
 
     @abc.abstractmethod
     def action(self, state: TState) -> TAction:
         pass
 
-    @abc.abstractmethod
     def act_and_train(self, t: int) -> Tuple[TState, TAction, float]:
         """Run a single act-and-train step.
         Returns the tuple (S_t, A_t, R_{t+1}).
@@ -75,8 +64,8 @@ class DiscreteAgent(Generic[TState, TAction], abc.ABC):
 
 
 def train(
-    env: DiscreteEnvironment[TState, TAction],
-    agent: DiscreteAgent[TState, TAction],
+    env: PSFAEnvironment[TState, TAction],
+    agent: PSFAAgent[TState, TAction],
     n_episodes: int,
     on_action: Callable[[TState, TAction, float, int], None] = None,
     on_episode_end: Callable[[int], None] = None,
