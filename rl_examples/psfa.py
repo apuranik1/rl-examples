@@ -67,6 +67,7 @@ def train(
     env: PSFAEnvironment[TState, TAction],
     agent: PSFAAgent[TState, TAction],
     n_episodes: int,
+    episode_length_cap: int,
     on_action: Callable[[TState, TAction, float, int], None] = None,
     on_episode_end: Callable[[int], None] = None,
 ) -> None:
@@ -76,7 +77,9 @@ def train(
     """
     for ep in range(n_episodes):
         t = 0
-        while not env.terminated:
+        for step in range(episode_length_cap):
+            if env.terminated:
+                break
             s, a, r = agent.act_and_train(t)  # returns (S_t, A_t, R_t)
             if on_action:
                 on_action(s, a, r, t)
