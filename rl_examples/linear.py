@@ -8,29 +8,33 @@ from typing import Callable, Deque, List, Sequence, Tuple, TypeVar
 import numpy as np
 
 from rl_examples.psfa import PSFAAgent, PSFAEnvironment, State
-from rl_examples.approximation import Estimator, Featurizer
+from rl_examples.approximation import TrainableEstimator, Featurizer
 
 TState = TypeVar("TState", bound=State)
 TAction = TypeVar("TAction")
 
 
-class LinearEstimator(Estimator):
+class LinearEstimator(TrainableEstimator):
     def __init__(self, input_shape: Sequence[int], lr: float):
         flat_dim = reduce(mul, input_shape, 1)
         self.weights = np.zeros(flat_dim, np.float32)
         self.bias = 0.0
         self.lr = lr
 
-    def estimate(self, data: np.ndarray) -> float:
-        return self.weights.dot(data.ravel()) + self.bias  # type: ignore
+    def batch_estimate(self, data: np.ndarray) -> np.ndarray:
+        batch_size = data.shape[0]
+        return data.reshape(batch_size, -1).dot(self.weights) + self.bias
 
-    def estimate_and_update(self, data: np.ndarray, target: float) -> float:
-        features = data.ravel()
-        estimate: float = self.weights.dot(features) + self.bias
-        error = estimate - target  # = dL/dEst
-        weight_grad = error * features  # = dL/dEst * dEst/dW
+    def batch_estimate_and_update(
+        self, data: np.ndarray, target: np.ndarray
+    ) -> np.ndarray:
+        batch_size = data.shape[0]
+        features = data.reshape(batch_size, -1)
+        estimate = features.dot(self.weights) + self.bias
+        error = estimate - target
+        weight_grad = error.dot(features) / batch_size
         self.weights -= self.lr * weight_grad
-        self.bias -= self.lr * error
+        self.bias -= self.lr * error.sum() / batch_size
         return estimate
 
 
@@ -102,15 +106,20 @@ class LinearApproximationTDNAgent(PSFAAgent[TState, TAction]):
             discount_factor *= self.gamma
         return value + discount_factor * trailing_rewards
 
+    def _featurize(self, state: TState) -> np.ndarray:
+        return self.featurizer.featurize(state)
+
     def act_and_train(self, t: int) -> Tuple[TState, TAction, float]:
         state = self.env.state
         action = self.action(state)
         reward = self.env.take_action(action)
         if len(self.data_queue) == self.n:
-            trailing_estimate = self.estimator.estimate(state)
+            trailing_estimate = self.estimator.estimate(self._featurize(state))
             reward_estimate = self._evaluate_queue(trailing_estimate)
             old_state, old_reward = self.data_queue.popleft()
-            self.estimator.estimate_and_update(old_state, reward_estimate)
+            self.estimator.estimate_and_update(
+                self._featurize(old_state), reward_estimate
+            )
         self.data_queue.append((state, reward))
         return state, action, reward
 
@@ -129,7 +138,7 @@ def run_example() -> None:
     agent = LinearApproximationTDNAgent(
         env, lambda s: rw.LineWalkAction.NOOP, rw.LineWalkFeaturizer(), 1.0, 5, 2e-8
     )
-    train(env, agent, 100)
+    train(env, agent, 100, 1000)
     print(agent.estimator.weights)
 
 

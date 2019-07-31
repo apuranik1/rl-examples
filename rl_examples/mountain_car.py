@@ -20,6 +20,9 @@ class MountainCarState(State):
         # corresponds to no physical reality
         return -2.5e-3 * math.cos(3 * self.x)
 
+    def __str__(self) -> str:
+        return f"MountainCarState(x={self.x}, vx={self.vx})"
+
 
 class MountainCarAction(Enum):
     Forward = 1
@@ -53,12 +56,12 @@ class MountainCarEnvironment(PSFAEnvironment[MountainCarState, MountainCarAction
 
     def take_action(self, action: MountainCarAction) -> float:
         old = self._state
-        new_x = old.x + old.vx
         new_vx = np.clip(
-            0.001 * action.value + old.g_x(),
+            old.vx + 0.001 * action.value + old.g_x(),
             MountainCarEnvironment.MIN_VX,
             MountainCarEnvironment.MAX_VX,
         )
+        new_x = old.x + new_vx
         self._state = self.make_state(new_x, new_vx)
         return -1.0
 
@@ -73,10 +76,16 @@ class MountainCarEnvironment(PSFAEnvironment[MountainCarState, MountainCarAction
 
 
 class MountainCarFeaturizer(Featurizer[Tuple[MountainCarState, MountainCarAction]]):
+    def __init__(self) -> None:
+        self.indices = {action: i for i, action in enumerate(MountainCarAction)}
+        self.action_len = len(self.indices)
+
     def featurize(self, data: Tuple[MountainCarState, MountainCarAction]) -> np.ndarray:
         """Build the feature array [x, v_x, acceleration]"""
         state, action = data
-        return np.array([state.x, state.vx, action.value])
+        action_data = np.zeros(self.action_len)
+        action_data[self.indices[action]] = 1
+        return np.concatenate([action_data, [state.x, 100 * state.vx]])
 
     def output_shape(self) -> Sequence[int]:
-        return [3]
+        return [self.action_len + 2]
